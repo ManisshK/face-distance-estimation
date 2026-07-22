@@ -48,10 +48,23 @@ AUTO_EXPOSURE: int = 1
 # ---------------------------------------------------------------------------
 
 MIN_DETECTION_CONFIDENCE: float = 0.7
-"""Minimum MediaPipe face-detection confidence threshold in [0.0, 1.0]."""
+"""Minimum YuNet face-detection score threshold in [0.0, 1.0].
+Detections with a confidence score below this value are discarded."""
 
 MAX_FACES: int = 1
 """Maximum number of simultaneous faces the detector tracks."""
+
+YUNET_MODEL_PATH: str = "backend/app/models/face_detection_yunet_2023mar.onnx"
+"""Path to the YuNet ONNX model file, relative to the project root.
+FaceDetector resolves this against the repository root at runtime."""
+
+YUNET_NMS_THRESHOLD: float = 0.3
+"""Non-maximum suppression IoU threshold for YuNet.  Overlapping bounding
+boxes with IoU above this value are suppressed, keeping only the highest-
+scoring box.  Lower values discard more overlapping boxes."""
+
+YUNET_TOP_K: int = 5000
+"""Maximum number of candidate detections retained before NMS in YuNet."""
 
 BOUNDING_BOX_COLOR: tuple[int, int, int] = (0, 255, 0)
 """BGR colour tuple used to draw the face bounding box."""

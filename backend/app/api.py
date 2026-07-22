@@ -222,15 +222,15 @@ class FaceDistanceAPI:
         result: dict[str, Any] = {
             "success": True,
             "face_detected": True,
-            "distance_cm": distance_cm,
-            "angle_deg": angle_deg,
+            "distance_cm": float(distance_cm),
+            "angle_deg": float(angle_deg),
             "bbox": {
-                "x": face.bbox_x,
-                "y": face.bbox_y,
-                "width": face.bbox_width,
-                "height": face.bbox_height,
+                "x": int(face.bbox_x),
+                "y": int(face.bbox_y),
+                "width": int(face.bbox_width),
+                "height": int(face.bbox_height),
             },
-            "detection_confidence": face.confidence,
+            "detection_confidence": float(face.confidence),
         }
 
         logger.debug(
