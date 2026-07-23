@@ -31,11 +31,14 @@ Running the server
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Iterator
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.api import FaceDistanceAPI
@@ -155,7 +158,16 @@ app: FastAPI = FastAPI(
     version=APP_VERSION,
     lifespan=lifespan,
 )
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -332,3 +344,104 @@ def calibrate(request: CalibrateRequest) -> CalibrateResponse:
             status_code=500,
             detail="An unexpected error occurred during calibration.",
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# MJPEG stream helpers
+# ---------------------------------------------------------------------------
+
+# Target inter-frame delay in seconds.  30 fps ≈ 33 ms between frames.
+_STREAM_FRAME_INTERVAL: float = 1.0 / 30.0
+
+# MJPEG multipart boundary token.
+_MJPEG_BOUNDARY: bytes = b"--frameboundary"
+
+# Content-type header for MJPEG streams.
+_MJPEG_CONTENT_TYPE: str = (
+    "multipart/x-mixed-replace; boundary=frameboundary"
+)
+
+
+async def _mjpeg_generator(api: FaceDistanceAPI) -> AsyncGenerator[bytes, None]:
+    """Async generator that yields MJPEG multipart frames indefinitely.
+
+    Each iteration:
+    1. Calls ``api.read_annotated_frame()`` to get a JPEG-encoded, annotated
+       frame from the shared camera/detector.
+    2. Wraps the bytes in the MJPEG multipart envelope.
+    3. Yields the envelope bytes to the StreamingResponse.
+    4. Sleeps for the configured inter-frame interval so the loop targets
+       ~30 fps without busy-spinning.
+
+    The generator exits cleanly when the client disconnects — FastAPI /
+    Starlette propagates a ``GeneratorExit`` or ``asyncio.CancelledError``
+    which terminates the async for-loop in the route.
+
+    Parameters
+    ----------
+    api : FaceDistanceAPI
+        The shared application API instance that owns the camera and detector.
+
+    Yields
+    ------
+    bytes
+        One MJPEG multipart envelope per camera frame.
+    """
+    while True:
+        # Offload the synchronous OpenCV work to a thread so the event loop
+        # is not blocked during frame capture and encoding.
+        frame_bytes: bytes | None = await asyncio.get_event_loop().run_in_executor(
+            None, api.read_annotated_frame
+        )
+
+        if frame_bytes is not None:
+            # Build the MJPEG multipart envelope.
+            envelope = (
+                _MJPEG_BOUNDARY + b"\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                b"Content-Length: " + str(len(frame_bytes)).encode() + b"\r\n"
+                b"\r\n" +
+                frame_bytes +
+                b"\r\n"
+            )
+            yield envelope
+
+        # Yield control back to the event loop between frames.
+        await asyncio.sleep(_STREAM_FRAME_INTERVAL)
+
+
+@app.get(
+    "/video",
+    summary="Live MJPEG video stream with bounding-box overlay",
+    response_description="Continuous MJPEG stream of annotated camera frames.",
+)
+async def video() -> StreamingResponse:
+    """Stream live annotated camera frames as an MJPEG multipart response.
+
+    Each frame is captured from the shared ``Camera`` instance, passed
+    through the shared ``FaceDetector``, annotated with a bounding box and
+    label (confidence, distance, angle), JPEG-encoded, and yielded as a
+    multipart envelope.
+
+    The stream continues until the client disconnects.  No new camera or
+    detector instances are created — the stream reuses the objects already
+    owned by ``FaceDistanceAPI``.
+
+    Returns
+    -------
+    StreamingResponse
+        An MJPEG ``multipart/x-mixed-replace`` streaming response.
+        Consume it with ``<img src="/video" />`` in the browser.
+
+    Notes
+    -----
+    * The ``GET /frame`` endpoint continues to work independently.
+      Both endpoints share the same camera but operate on separate
+      ``read()`` calls, so neither blocks the other.
+    * Target frame rate is 30 fps; actual rate depends on camera speed
+      and detection latency.
+    """
+    return StreamingResponse(
+        _mjpeg_generator(app.state.api),
+        media_type=_MJPEG_CONTENT_TYPE,
+    )

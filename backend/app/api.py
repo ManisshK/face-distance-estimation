@@ -45,14 +45,21 @@ Usage
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
+import cv2
 import numpy as np
 from numpy.typing import NDArray
 
 from app.angle import AngleEstimator
 from app.calibration import CameraCalibrator
 from app.camera import Camera
+from app.config import (
+    BOUNDING_BOX_COLOR,
+    BOUNDING_BOX_THICKNESS,
+    TEXT_SIZE,
+    COLOR_TEXT,
+)
 from app.detector import FaceDetection, FaceDetector
 from app.distance import DistanceEstimator
 
@@ -319,6 +326,113 @@ class FaceDistanceAPI:
         )
 
         return focal_length
+
+    def read_annotated_frame(self) -> Optional[bytes]:
+        """Capture one frame, annotate it with detection results, and return JPEG bytes.
+
+        Used exclusively by the ``GET /video`` MJPEG stream endpoint.
+        Reuses the same ``Camera`` and ``FaceDetector`` instances owned by
+        this class — no additional hardware resources are acquired.
+
+        The annotation pipeline:
+
+        1. Read one BGR frame from the camera.
+        2. Run face detection.
+        3. If a face is found:
+           a. Draw a bounding box rectangle using ``BOUNDING_BOX_COLOR``
+              and ``BOUNDING_BOX_THICKNESS`` from ``config.py``.
+           b. Estimate distance (cm) and angle (°).
+           c. Draw a label above the box:
+              ``Person <conf>%  <distance> cm  <angle>°``
+        4. JPEG-encode the annotated frame.
+        5. Return the encoded bytes, or ``None`` if capture failed.
+
+        Returns
+        -------
+        bytes or None
+            JPEG-encoded frame bytes, or ``None`` when the camera fails to
+            deliver a frame (client should stop consuming the stream).
+
+        Notes
+        -----
+        * This method intentionally does **not** update the moving-average
+          history inside ``DistanceEstimator`` — that state is owned by
+          ``process_frame()``.  Distance shown in the overlay is the raw
+          pinhole estimate so the two pipelines remain independent.
+        * JPEG quality is fixed at 85 — a good balance between file size
+          and visual fidelity for a live stream.
+        """
+        success, frame = self._camera.read()
+        if not success or frame is None:
+            logger.warning("read_annotated_frame() — frame capture failed.")
+            return None
+
+        detections: list[FaceDetection] = self._detector.detect(frame)
+
+        if detections:
+            face: FaceDetection = detections[0]
+            frame_width: int = frame.shape[1]
+
+            # Run estimators for overlay text only — do NOT update the
+            # moving-average buffer used by process_frame().
+            try:
+                distance_cm: float = self._distance_estimator.estimate(face)
+                angle_deg: float = self._angle_estimator.estimate(face, frame_width)
+            except Exception as exc:
+                logger.debug("read_annotated_frame() — estimator error: %s", exc)
+                distance_cm = 0.0
+                angle_deg = 0.0
+
+            # --- Draw bounding box ---
+            x, y, w, h = face.bbox_x, face.bbox_y, face.bbox_width, face.bbox_height
+            cv2.rectangle(
+                frame,
+                (x, y),
+                (x + w, y + h),
+                BOUNDING_BOX_COLOR,
+                BOUNDING_BOX_THICKNESS,
+            )
+
+            # --- Draw label above the box ---
+            conf_pct: int = round(face.confidence * 100)
+            label: str = (
+                f"Person {conf_pct}%  "
+                f"{distance_cm:.1f} cm  "
+                f"{angle_deg:+.1f}\u00b0"
+            )
+
+            # Choose a Y position above the box; clamp so text stays in frame.
+            label_y: int = max(y - 10, 20)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+
+            # Dark shadow for readability on any background.
+            cv2.putText(
+                frame, label,
+                (x, label_y),
+                font, TEXT_SIZE,
+                (0, 0, 0),          # black shadow
+                BOUNDING_BOX_THICKNESS + 2,
+                cv2.LINE_AA,
+            )
+            # White foreground text.
+            cv2.putText(
+                frame, label,
+                (x, label_y),
+                font, TEXT_SIZE,
+                COLOR_TEXT,
+                BOUNDING_BOX_THICKNESS,
+                cv2.LINE_AA,
+            )
+
+        # JPEG encode — quality 85 balances size and fidelity.
+        encode_ok, buffer = cv2.imencode(
+            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
+        )
+        if not encode_ok:
+            logger.warning("read_annotated_frame() — JPEG encoding failed.")
+            return None
+
+        return buffer.tobytes()
 
     def shutdown(self) -> None:
         """Release all backend resources.

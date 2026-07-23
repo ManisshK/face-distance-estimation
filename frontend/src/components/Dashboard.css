@@ -204,6 +204,24 @@
     filter:blur(100px);
 }
 
+/* ===== CAMERA STREAM ===== */
+
+.camera-stream {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 22px;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.camera-stream--visible {
+    opacity: 1;
+}
+
 /* overlay */
 
 .camera-overlay{

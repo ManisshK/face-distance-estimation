@@ -54,7 +54,7 @@ Detections with a confidence score below this value are discarded."""
 MAX_FACES: int = 1
 """Maximum number of simultaneous faces the detector tracks."""
 
-YUNET_MODEL_PATH: str = "backend/app/models/face_detection_yunet_2023mar.onnx"
+YUNET_MODEL_PATH = "backend/models/face_detection_yunet_2023mar.onnx"
 """Path to the YuNet ONNX model file, relative to the project root.
 FaceDetector resolves this against the repository root at runtime."""
 
@@ -65,6 +65,27 @@ scoring box.  Lower values discard more overlapping boxes."""
 
 YUNET_TOP_K: int = 5000
 """Maximum number of candidate detections retained before NMS in YuNet."""
+
+# Minimum confidence a detection must reach to be accepted by the shared
+# pipeline.  Detections below this value are treated as noise and ignored.
+# This is applied *after* YuNet's own score_threshold filter, so it must be
+# >= MIN_DETECTION_CONFIDENCE to have any effect.
+STREAM_CONFIDENCE_THRESHOLD: float = 0.80
+"""Post-YuNet confidence gate used by the shared pipeline (0.0–1.0).
+Raise this value to reduce false positives; lower it to accept weaker hits."""
+
+# Number of consecutive frames where no valid detection is found before the
+# pipeline stops reporting the previous face.  Keeping the last good box for
+# a short grace period prevents flickering when detection is momentarily lost.
+DETECTION_GRACE_FRAMES: int = 3
+"""Frames of missing detection tolerated before clearing the tracked face."""
+
+# Exponential moving-average alpha for bounding-box coordinate smoothing.
+# alpha=1.0 means no smoothing (raw detector output); alpha=0.0 means the
+# position never moves.  A value around 0.4–0.6 gives a good balance between
+# responsiveness and stability.
+BBOX_SMOOTHING_ALPHA: float = 0.5
+"""EMA alpha for bounding-box coordinate smoothing (0.0–1.0)."""
 
 BOUNDING_BOX_COLOR: tuple[int, int, int] = (0, 255, 0)
 """BGR colour tuple used to draw the face bounding box."""

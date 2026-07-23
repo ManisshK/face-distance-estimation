@@ -134,3 +134,11 @@ export async function calibrate(
     body: JSON.stringify(body),
   });
 }
+
+/**
+ * Returns the absolute URL for the MJPEG video stream endpoint.
+ * Use as:  <img src={getVideoStreamUrl()} />
+ */
+export function getVideoStreamUrl(): string {
+  return `${BASE_URL}/video`;
+}

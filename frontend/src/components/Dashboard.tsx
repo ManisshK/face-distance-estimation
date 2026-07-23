@@ -6,14 +6,9 @@
  * Data flow:
  *   useFrameData() → FrameData snapshot → props → child components
  *
- * Responsibilities:
- *  - Call useFrameData() once.
- *  - Pass derived values down to presentational children.
- *  - Render the camera section with connection-aware overlay text.
- *  - Render the header with live FPS, latency and connection badge.
- *
- * No business logic or derivations live here — everything comes
- * pre-computed from the hook.
+ * The camera section renders the live MJPEG stream from GET /video
+ * when the backend is reachable. An overlay is shown on top of the
+ * stream (or instead of it) when the backend is offline or loading.
  */
 
 import Metrics from "./Metrics";
@@ -22,6 +17,7 @@ import Radar from "./Radar";
 import Guidance from "./Guidance";
 import CalibrationPanel from "./CalibrationPanel";
 import { useFrameData } from "../hooks/useFrameData";
+import { getVideoStreamUrl } from "../services/api";
 import "./Dashboard.css";
 
 function Dashboard() {
@@ -41,6 +37,13 @@ function Dashboard() {
     error,
     loading,
   } = useFrameData();
+
+  // Track whether the <img> has successfully loaded at least one frame.
+  // NOTE: onLoad never fires for MJPEG streams because the response never
+  // "finishes" — the browser keeps the connection open indefinitely.
+  // Stream visibility is therefore driven by `connected` (from /frame poll)
+  // rather than by an onLoad event. The <img> is always mounted so the
+  // browser opens the stream connection immediately on render.
 
   // -------------------------------------------------------------------------
   // Header badge
@@ -64,7 +67,8 @@ function Dashboard() {
   }
 
   // -------------------------------------------------------------------------
-  // Camera overlay content
+  // Camera overlay — shown when backend is unreachable or still loading.
+  // Hidden (via CSS) once the stream is live.
   // -------------------------------------------------------------------------
 
   let cameraIcon = "📷";
@@ -76,15 +80,21 @@ function Dashboard() {
   } else if (!connected) {
     cameraIcon = "⚠️";
     cameraMessage = error ?? "Cannot reach backend. Is the server running?";
-  } else if (!faceDetected) {
-    cameraMessage = "No face detected. Position yourself in front of the camera.";
   } else {
-    cameraMessage = "Face detected — tracking active.";
+    cameraMessage = "Starting stream…";
   }
+
+  // Show the overlay only when the backend is genuinely unreachable.
+  // When connected, the <img> is visible and the overlay is not rendered.
+  // The "Starting stream…" intermediate state is removed — if the backend
+  // is reachable the stream is already playing.
+  const showOverlay = !connected;
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
+
+  const videoUrl = getVideoStreamUrl();
 
   return (
     <div className="dashboard">
@@ -123,17 +133,31 @@ function Dashboard() {
         {/* CAMERA SECTION */}
         <section className="camera-section">
           <div className="camera-window">
-            <div className="camera-overlay">
 
-              <div className="camera-icon">
-                {cameraIcon}
+            {/*
+              Live MJPEG stream.
+              The <img> tag natively supports MJPEG — the browser keeps one
+              HTTP connection open and repaints as new JPEG frames arrive.
+              onLoad is NOT used here because MJPEG responses never complete,
+              so that event never fires. Visibility is controlled by the
+              `connected` flag from the /frame polling hook instead.
+              The image is always mounted; CSS handles show/hide.
+            */}
+            <img
+              src={videoUrl}
+              alt="Live webcam feed with face detection overlay"
+              className={`camera-stream ${connected ? "camera-stream--visible" : ""}`}
+            />
+
+            {/* Status overlay — sits on top when stream hasn't loaded */}
+            {showOverlay && (
+              <div className="camera-overlay">
+                <div className="camera-icon">{cameraIcon}</div>
+                <h2>{cameraTitle}</h2>
+                <p>{cameraMessage}</p>
               </div>
+            )}
 
-              <h2>{cameraTitle}</h2>
-
-              <p>{cameraMessage}</p>
-
-            </div>
           </div>
         </section>
 
