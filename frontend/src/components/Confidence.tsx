@@ -1,7 +1,17 @@
+/**
+ * Confidence.tsx
+ *
+ * Pure presentational component.
+ * Receives confidence as an integer 0–100 (conversion done upstream).
+ * No structural changes from the original — only type annotation is
+ * kept explicit and the transition on the progress bar is preserved.
+ */
+
 import "./Confidence.css";
 import Card from "./Common/Card";
 
 type ConfidenceProps = {
+  /** Detection confidence as an integer percentage 0–100. */
   confidence: number;
 };
 
@@ -25,15 +35,13 @@ function Confidence({ confidence }: ConfidenceProps) {
       <div className="confidence-container">
         <h1 className="confidence-value">{confidence}%</h1>
 
-        <p className={`confidence-status ${statusClass}`}>
-          {status}
-        </p>
+        <p className={`confidence-status ${statusClass}`}>{status}</p>
 
         <div className="progress-bar">
           <div
             className="progress-fill"
             style={{ width: `${confidence}%` }}
-          ></div>
+          />
         </div>
       </div>
     </Card>

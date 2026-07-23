@@ -1,0 +1,96 @@
+/* CalibrationPanel.css */
+
+.calibration-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calibration-description {
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.calibration-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.calibration-input {
+  flex: 1;
+  background: #0b1220;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: white;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.calibration-input:focus {
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.calibration-input::placeholder {
+  color: #475569;
+}
+
+/* Hide browser-default number arrows */
+.calibration-input::-webkit-inner-spin-button,
+.calibration-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.calibration-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.calibration-button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.calibration-button:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.calibration-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.calibration-button.loading {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.calibration-result {
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.calibration-result.success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.calibration-result.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}

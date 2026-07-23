@@ -79,6 +79,27 @@
     color:#22C55E;
 }
 
+.warning-badge{
+
+    background:rgba(250,204,21,.15);
+
+    color:#FACC15;
+}
+
+.error-badge{
+
+    background:rgba(239,68,68,.15);
+
+    color:#EF4444;
+}
+
+.connecting{
+
+    background:rgba(148,163,184,.15);
+
+    color:#94A3B8;
+}
+
 .header-info{
 
     background:#1E293B;
