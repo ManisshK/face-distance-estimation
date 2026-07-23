@@ -1,0 +1,35 @@
+.guidance-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+}
+
+.guidance-icon {
+    font-size: 42px;
+}
+
+.guidance-icon.success {
+    color: #22c55e;
+}
+
+.guidance-icon.warning {
+    color: #facc15;
+}
+
+.guidance-icon.error {
+    color: #ef4444;
+}
+
+.guidance-container h3 {
+    color: white;
+    margin: 0;
+    font-size: 22px;
+}
+
+.guidance-container p {
+    color: #b8c0d0;
+    font-size: 14px;
+    line-height: 1.5;
+}

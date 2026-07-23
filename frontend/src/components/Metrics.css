@@ -1,0 +1,26 @@
+.metrics-card{
+    background:#1E293B;
+    border-radius:18px;
+    padding:20px;
+}
+
+.metrics-card h3{
+    margin-bottom:22px;
+    font-size:22px;
+}
+
+.metric-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+
+    padding:14px 0;
+
+    border-bottom:1px solid rgba(255,255,255,.08);
+
+    color:#E2E8F0;
+}
+
+.metric-row:last-child{
+    border-bottom:none;
+}

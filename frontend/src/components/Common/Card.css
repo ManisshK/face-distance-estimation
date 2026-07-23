@@ -1,0 +1,25 @@
+.card {
+  background: #1A2338;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 22px;
+  color: white;
+
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+
+  transition: transform .25s ease,
+              box-shadow .25s ease,
+              border-color .25s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(59,130,246,.35);
+  box-shadow: 0 12px 30px rgba(0,0,0,.35);
+}
+
+.card h2 {
+  font-size: 1.8rem;
+  margin-bottom: 18px;
+  font-weight: 700;
+}
