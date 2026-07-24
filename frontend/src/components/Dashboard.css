@@ -121,7 +121,7 @@
 }
 
 .header-brand p {
-  font-size: clamp(10px, 0.8vw, 12px);
+  font-size: clamp(9px, 0.8vw, 12px);
   color: #64748b;
   font-weight: 500;
   letter-spacing: 0.2px;
@@ -155,8 +155,8 @@
 }
 
 .badge-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -232,7 +232,7 @@
 }
 
 .header-info strong {
-  font-size: clamp(14px, 1.2vw, 17px);
+  font-size: clamp(13px, 1.2vw, 15px);
   font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -370,7 +370,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: clamp(20px, 2vw, 24px);
 }
 
 .camera-overlay h2 {

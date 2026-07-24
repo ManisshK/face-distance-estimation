@@ -30,9 +30,9 @@ function Radar({ distanceDisplay, angleDisplay, angleDeg, distanceCm, faceDetect
         <div className="radar-display">
           <svg viewBox="0 0 120 120" className="radar-svg" aria-hidden="true">
             {/* Rings */}
-            <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(34,197,94,0.18)" strokeWidth="1"/>
-            <circle cx="60" cy="60" r="36" fill="none" stroke="rgba(34,197,94,0.12)" strokeWidth="1"/>
-            <circle cx="60" cy="60" r="18" fill="none" stroke="rgba(34,197,94,0.08)" strokeWidth="1"/>
+            <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(34,197,94,0.25)" strokeWidth="1"/>
+            <circle cx="60" cy="60" r="36" fill="none" stroke="rgba(34,197,94,0.18)" strokeWidth="1"/>
+            <circle cx="60" cy="60" r="18" fill="none" stroke="rgba(34,197,94,0.12)" strokeWidth="1"/>
             {/* Cross-hair */}
             <line x1="60" y1="6"  x2="60" y2="114" stroke="rgba(34,197,94,0.07)" strokeWidth="1"/>
             <line x1="6"  y1="60" x2="114" y2="60" stroke="rgba(34,197,94,0.07)" strokeWidth="1"/>
