@@ -1,47 +1,53 @@
-/**
- * Confidence.tsx
- *
- * Pure presentational component.
- * Receives confidence as an integer 0–100 (conversion done upstream).
- * No structural changes from the original — only type annotation is
- * kept explicit and the transition on the progress bar is preserved.
- */
-
 import "./Confidence.css";
 import Card from "./Common/Card";
 
 type ConfidenceProps = {
-  /** Detection confidence as an integer percentage 0–100. */
   confidence: number;
 };
 
 function Confidence({ confidence }: ConfidenceProps) {
   let status = "Poor";
   let statusClass = "poor";
+  let accentColor: "green" | "blue" | "amber" | "rose" = "rose";
 
   if (confidence >= 90) {
     status = "Excellent";
     statusClass = "excellent";
+    accentColor = "green";
   } else if (confidence >= 70) {
     status = "Good";
     statusClass = "good";
+    accentColor = "blue";
   } else if (confidence >= 50) {
     status = "Fair";
     statusClass = "fair";
+    accentColor = "amber";
   }
 
   return (
-    <Card title="🎯 Detection Confidence">
+    <Card title="Detection Confidence" accent={accentColor}>
       <div className="confidence-container">
-        <h1 className="confidence-value">{confidence}%</h1>
+        <div className="confidence-score-row">
+          <span className={`confidence-value ${statusClass}`}>{confidence}%</span>
+          <span className={`confidence-badge ${statusClass}`}>{status}</span>
+        </div>
 
-        <p className={`confidence-status ${statusClass}`}>{status}</p>
-
-        <div className="progress-bar">
+        <div className="progress-track">
           <div
-            className="progress-fill"
+            className={`progress-fill ${statusClass}`}
             style={{ width: `${confidence}%` }}
+            role="progressbar"
+            aria-valuenow={confidence}
+            aria-valuemin={0}
+            aria-valuemax={100}
           />
+        </div>
+
+        {/* Tick marks */}
+        <div className="progress-ticks" aria-hidden="true">
+          <span>0</span>
+          <span>50</span>
+          <span>100</span>
         </div>
       </div>
     </Card>

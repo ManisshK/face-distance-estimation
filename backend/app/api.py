@@ -1,50 +1,44 @@
 """
 api.py — Backend orchestration layer for the Face Distance Estimation backend.
 
-This module exposes a single public class:
+Architecture — shared pipeline
+-------------------------------
+A single background thread (``_pipeline_thread``) owns the entire
+capture → detect → estimate → annotate → encode loop.  It runs at the
+camera's native frame rate and writes its output into two thread-safe
+slots protected by a ``threading.Lock``:
 
-* ``FaceDistanceAPI`` — coordinates the camera, face detector, distance
-  estimator, angle estimator, and camera calibrator into a cohesive
-  processing pipeline.
+* ``_frame_state`` — the latest :class:`FrameState` snapshot consumed by
+  ``process_frame()`` and ``calibrate()``.
+* ``_jpeg_bytes``  — the latest annotated JPEG bytes consumed by
+  ``read_annotated_frame()``.
 
-Responsibilities
-----------------
-* Initialise and own exactly one instance of each component.
-* Open the camera at startup; raise ``RuntimeError`` on failure.
-* Process frames through the full detection → estimation pipeline and return
-  structured result dictionaries.
-* Expose a single-frame calibration workflow.
-* Release all resources cleanly on shutdown; safe to call multiple times.
+Both public methods are now **pure readers** — they never touch the camera
+or the detector.  This eliminates the duplicate-read / duplicate-detect
+problem and ensures the video stream and the metrics endpoint share exactly
+the same detection result for every physical camera frame.
 
-Out of scope
-------------
-This module does **not** create a FastAPI application, define HTTP routes,
-configure Uvicorn, implement WebSocket streaming, perform visualisation,
-act as a CLI entry point, or configure logging.  Those responsibilities
-belong to ``main.py``.
+Stabilisation
+-------------
+* **Confidence gate** — raw detections below ``STREAM_CONFIDENCE_THRESHOLD``
+  are discarded as noise before any smoothing or estimation takes place.
+* **Grace-period hold** — when detection is lost the previous bounding box
+  and estimates are retained for up to ``DETECTION_GRACE_FRAMES`` frames
+  before being cleared.  This prevents single-frame blink artefacts.
+* **Bounding-box EMA** — the four bbox coordinates are smoothed with an
+  exponential moving average controlled by ``BBOX_SMOOTHING_ALPHA``.
+  alpha=1.0 means no smoothing; alpha=0.5 is the default.
 
-Logging is intentionally **not** configured here.  The application entry
-point (``main.py``) is responsible for calling ``logging.basicConfig()``.
-
-Usage
------
-::
-
-    from app.api import FaceDistanceAPI
-
-    api = FaceDistanceAPI()
-
-    result = api.process_frame()
-    # {'success': True, 'face_detected': True, 'distance_cm': 82.4, ...}
-
-    focal_length = api.calibrate(known_distance_cm=100.0)
-
-    api.shutdown()
+All thresholds and alphas are imported from ``config.py`` — nothing is
+hardcoded.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import cv2
@@ -55,115 +49,291 @@ from app.angle import AngleEstimator
 from app.calibration import CameraCalibrator
 from app.camera import Camera
 from app.config import (
+    BBOX_SMOOTHING_ALPHA,
     BOUNDING_BOX_COLOR,
     BOUNDING_BOX_THICKNESS,
-    TEXT_SIZE,
     COLOR_TEXT,
+    DETECTION_GRACE_FRAMES,
+    STREAM_CONFIDENCE_THRESHOLD,
+    TEXT_SIZE,
 )
 from app.detector import FaceDetection, FaceDetector
 from app.distance import DistanceEstimator
 
+logger: logging.Logger = logging.getLogger(__name__)
+
+
 # ---------------------------------------------------------------------------
-# Module logger — configuration delegated to the application entry point
+# Internal state dataclass
 # ---------------------------------------------------------------------------
 
-logger: logging.Logger = logging.getLogger(__name__)
+@dataclass
+class FrameState:
+    """Snapshot produced by the pipeline thread and consumed by endpoints.
+
+    All fields reflect the most recent completed pipeline iteration.
+    The dataclass is replaced atomically under the pipeline lock — readers
+    always see a consistent snapshot.
+    """
+
+    # Camera health
+    capture_ok: bool = False
+
+    # Detection result (None when no face is present after grace period)
+    face: Optional[FaceDetection] = None
+
+    # Smoothed bbox coordinates (floats; rounded to int when used for drawing)
+    smooth_x: float = 0.0
+    smooth_y: float = 0.0
+    smooth_w: float = 0.0
+    smooth_h: float = 0.0
+
+    # Estimation results
+    distance_cm: float = 0.0
+    angle_deg: float = 0.0
+
+    # Counters
+    grace_counter: int = 0          # frames elapsed since last valid detection
+    frame_width: int = 640
 
 
 # ---------------------------------------------------------------------------
 # FaceDistanceAPI
 # ---------------------------------------------------------------------------
 
-
 class FaceDistanceAPI:
-    """Orchestrates camera, detection, and estimation components.
+    """Orchestrates camera, detection, and estimation via a shared pipeline.
 
-    ``FaceDistanceAPI`` owns the full lifecycle of one ``Camera``,
-    ``FaceDetector``, ``DistanceEstimator``, ``AngleEstimator``, and
-    ``CameraCalibrator``.  The camera is opened during ``__init__``; all
-    resources are released by :meth:`shutdown`.
-
-    The class deliberately exposes a narrow, dictionary-based interface so
-    that higher-level layers (FastAPI routes, WebSocket handlers, CLIs) can
-    consume results without importing any component directly.
+    A single background thread runs the full capture → detect → estimate →
+    annotate → encode loop continuously.  The two public endpoint methods
+    (``process_frame`` and ``read_annotated_frame``) are pure readers that
+    return the latest cached result without touching hardware.
 
     Thread safety
     -------------
-    This class is **not** thread-safe.  Each concurrent user should hold its
-    own instance, or external locking must be applied.
-
-    Example
-    -------
-    ::
-
-        api = FaceDistanceAPI()
-        try:
-            while True:
-                result = api.process_frame()
-                if result["success"] and result["face_detected"]:
-                    print(result["distance_cm"], result["angle_deg"])
-        finally:
-            api.shutdown()
+    ``_frame_state`` and ``_jpeg_bytes`` are both guarded by ``_lock``.
+    The pipeline thread holds the lock only for the brief copy-write at the
+    end of each iteration; readers hold it only long enough to copy the
+    reference.  OpenCV and detector calls happen outside the lock.
     """
 
     def __init__(self) -> None:
-        """Initialise all backend components and open the camera.
-
-        Creates exactly one instance of:
-
-        * :class:`~app.camera.Camera` — opened immediately via ``start()``.
-        * :class:`~app.detector.FaceDetector` — MediaPipe model loaded.
-        * :class:`~app.distance.DistanceEstimator` — moving-average buffer
-          initialised.
-        * :class:`~app.angle.AngleEstimator` — stateless; config validated.
-        * :class:`~app.calibration.CameraCalibrator` — default focal length
-          set.
-
-        Raises
-        ------
-        RuntimeError
-            If the camera cannot be opened (device unavailable, index invalid,
-            or already in use by another process), or if any component fails
-            to initialise due to misconfigured constants.
-        """
+        """Initialise all components and start the pipeline background thread."""
         self._camera = Camera()
         self._detector = FaceDetector()
         self._distance_estimator = DistanceEstimator()
         self._angle_estimator = AngleEstimator()
         self._calibrator = CameraCalibrator()
 
-        self._is_shutdown: bool = False
-
         try:
             self._camera.start()
         except RuntimeError as exc:
-            # Release the detector before re-raising so we don't leak
-            # MediaPipe resources when the camera fails to open.
             self._detector.close()
             raise RuntimeError(
                 f"FaceDistanceAPI failed to start: camera could not be opened. "
                 f"Details: {exc}"
             ) from exc
 
-        logger.info("FaceDistanceAPI initialised — all components ready.")
+        # Shared state protected by _lock
+        self._lock = threading.Lock()
+        self._frame_state: FrameState = FrameState()
+        self._jpeg_bytes: Optional[bytes] = None
+
+        # Pipeline control
+        self._stop_event = threading.Event()
+        self._is_shutdown = False
+
+        self._pipeline_thread = threading.Thread(
+            target=self._pipeline_loop,
+            name="face-pipeline",
+            daemon=True,
+        )
+        self._pipeline_thread.start()
+
+        logger.info("FaceDistanceAPI initialised — pipeline thread started.")
 
     # ------------------------------------------------------------------
-    # Public API
+    # Pipeline thread
+    # ------------------------------------------------------------------
+
+    def _pipeline_loop(self) -> None:
+        """Main loop running in the background thread.
+
+        Each iteration:
+        1. Read one frame from the camera.
+        2. Run YuNet face detection.
+        3. Apply confidence gate and grace-period logic.
+        4. If a valid (possibly held) face exists:
+           a. Apply EMA smoothing to the bounding box.
+           b. Estimate distance and angle.
+           c. Draw the annotated overlay onto the frame.
+        5. JPEG-encode the annotated frame.
+        6. Write both ``_frame_state`` and ``_jpeg_bytes`` under the lock.
+
+        The loop runs as fast as the camera allows; no artificial sleep is
+        added here.  The camera's own hardware timing (TARGET_FPS in config)
+        limits throughput naturally.
+        """
+        # Persistent smoothed bbox — lives across iterations
+        smooth_x: float = 0.0
+        smooth_y: float = 0.0
+        smooth_w: float = 0.0
+        smooth_h: float = 0.0
+        initialized: bool = False   # True once the EMA has a seed value
+        grace_counter: int = 0
+        last_face: Optional[FaceDetection] = None
+
+        while not self._stop_event.is_set():
+            # ── 1. Capture ──────────────────────────────────────────────
+            capture_ok, frame = self._camera.read()
+
+            if not capture_ok or frame is None:
+                logger.warning("_pipeline_loop() — frame capture failed.")
+                state = FrameState(capture_ok=False)
+                with self._lock:
+                    self._frame_state = state
+                continue
+
+            frame_height, frame_width = frame.shape[:2]
+
+            # ── 2. Detect ───────────────────────────────────────────────
+            raw_detections: list[FaceDetection] = self._detector.detect(frame)
+
+            # ── 3. Confidence gate + grace period ───────────────────────
+            valid: Optional[FaceDetection] = None
+            for det in raw_detections:
+                if det.confidence >= STREAM_CONFIDENCE_THRESHOLD:
+                    valid = det
+                    break
+
+            if valid is not None:
+                # Fresh high-confidence detection — reset grace counter
+                last_face = valid
+                grace_counter = 0
+            else:
+                if last_face is not None and grace_counter < DETECTION_GRACE_FRAMES:
+                    # Within grace period — hold the previous detection
+                    valid = last_face
+                    grace_counter += 1
+                else:
+                    # Grace period exhausted — clear tracked face
+                    last_face = None
+                    initialized = False
+                    grace_counter = 0
+
+            # ── 4a. EMA bbox smoothing ───────────────────────────────────
+            face_for_state: Optional[FaceDetection] = None
+            distance_cm: float = 0.0
+            angle_deg: float = 0.0
+
+            if valid is not None:
+                rx = float(valid.bbox_x)
+                ry = float(valid.bbox_y)
+                rw = float(valid.bbox_width)
+                rh = float(valid.bbox_height)
+
+                if not initialized:
+                    smooth_x, smooth_y, smooth_w, smooth_h = rx, ry, rw, rh
+                    initialized = True
+                else:
+                    a = BBOX_SMOOTHING_ALPHA
+                    smooth_x = a * rx + (1.0 - a) * smooth_x
+                    smooth_y = a * ry + (1.0 - a) * smooth_y
+                    smooth_w = a * rw + (1.0 - a) * smooth_w
+                    smooth_h = a * rh + (1.0 - a) * smooth_h
+
+                # Build a synthetic FaceDetection from the smoothed coords
+                # for drawing and estimation; native int required by estimators.
+                sx = int(round(smooth_x))
+                sy = int(round(smooth_y))
+                sw = max(1, int(round(smooth_w)))
+                sh = max(1, int(round(smooth_h)))
+
+                smoothed_face = FaceDetection(
+                    bbox_x=sx,
+                    bbox_y=sy,
+                    bbox_width=sw,
+                    bbox_height=sh,
+                    center_x=sx + sw // 2,
+                    center_y=sy + sh // 2,
+                    confidence=valid.confidence,
+                )
+
+                # ── 4b. Estimate ─────────────────────────────────────────
+                try:
+                    distance_cm = self._distance_estimator.estimate(smoothed_face)
+                    angle_deg = self._angle_estimator.estimate(
+                        smoothed_face, frame_width
+                    )
+                except Exception as exc:
+                    logger.debug("_pipeline_loop() — estimator error: %s", exc)
+
+                face_for_state = smoothed_face
+
+                # ── 4c. Draw overlay ──────────────────────────────────────
+                cv2.rectangle(
+                    frame,
+                    (sx, sy),
+                    (sx + sw, sy + sh),
+                    BOUNDING_BOX_COLOR,
+                    BOUNDING_BOX_THICKNESS,
+                )
+
+                conf_pct = round(valid.confidence * 100)
+                label = (
+                    f"Person {conf_pct}%  "
+                    f"{distance_cm:.1f} cm  "
+                    f"{angle_deg:+.1f}\u00b0"
+                )
+                label_y = max(sy - 10, 20)
+                font = cv2.FONT_HERSHEY_SIMPLEX
+
+                # Shadow pass for readability
+                cv2.putText(
+                    frame, label, (sx, label_y),
+                    font, TEXT_SIZE, (0, 0, 0),
+                    BOUNDING_BOX_THICKNESS + 2, cv2.LINE_AA,
+                )
+                # Foreground text
+                cv2.putText(
+                    frame, label, (sx, label_y),
+                    font, TEXT_SIZE, COLOR_TEXT,
+                    BOUNDING_BOX_THICKNESS, cv2.LINE_AA,
+                )
+
+            # ── 5. JPEG encode ───────────────────────────────────────────
+            encode_ok, buffer = cv2.imencode(
+                ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
+            )
+            jpeg: Optional[bytes] = buffer.tobytes() if encode_ok else None
+
+            # ── 6. Write shared state (lock held only briefly) ───────────
+            new_state = FrameState(
+                capture_ok=True,
+                face=face_for_state,
+                smooth_x=smooth_x,
+                smooth_y=smooth_y,
+                smooth_w=smooth_w,
+                smooth_h=smooth_h,
+                distance_cm=distance_cm,
+                angle_deg=angle_deg,
+                grace_counter=grace_counter,
+                frame_width=frame_width,
+            )
+            with self._lock:
+                self._frame_state = new_state
+                self._jpeg_bytes = jpeg
+
+    # ------------------------------------------------------------------
+    # Public API — endpoint methods (pure readers)
     # ------------------------------------------------------------------
 
     def process_frame(self) -> dict[str, Any]:
-        """Capture one frame and run the full detection-estimation pipeline.
+        """Return the latest pipeline result as a structured dictionary.
 
-        Pipeline steps
-        --------------
-        1. Read one frame from the camera.
-        2. If capture fails, return an error result dictionary.
-        3. Detect faces in the frame.
-        4. If no face is detected, return a no-face result dictionary.
-        5. Use **only the first** detected face.
-        6. Estimate distance (cm) via :class:`~app.distance.DistanceEstimator`.
-        7. Estimate horizontal angle (°) via :class:`~app.angle.AngleEstimator`.
-        8. Return a structured result dictionary.
+        This method does **not** read from the camera or run detection.
+        It copies the current ``_frame_state`` snapshot under the lock and
+        converts it to the API response format.
 
         Returns
         -------
@@ -172,17 +342,11 @@ class FaceDistanceAPI:
 
             **Capture failure**::
 
-                {
-                    "success": False,
-                    "error": "Failed to capture frame."
-                }
+                {"success": False, "error": "Failed to capture frame."}
 
-            **No face detected**::
+            **No face**::
 
-                {
-                    "success": True,
-                    "face_detected": False
-                }
+                {"success": True, "face_detected": False}
 
             **Face detected**::
 
@@ -191,46 +355,25 @@ class FaceDistanceAPI:
                     "face_detected": True,
                     "distance_cm": float,
                     "angle_deg": float,
-                    "bbox": {
-                        "x": int,
-                        "y": int,
-                        "width": int,
-                        "height": int
-                    },
+                    "bbox": {"x": int, "y": int, "width": int, "height": int},
                     "detection_confidence": float
                 }
-
-        Notes
-        -----
-        * Unexpected internal errors (estimation failures) are logged and
-          re-raised rather than silently swallowed, so the caller can decide
-          on retry or abort behaviour.
-        * This method is safe to call in a tight loop; the distance estimator
-          maintains its own moving-average history across calls.
         """
-        success, frame = self._camera.read()
+        with self._lock:
+            state = self._frame_state
 
-        if not success or frame is None:
-            logger.warning("process_frame() — frame capture failed.")
+        if not state.capture_ok:
             return {"success": False, "error": "Failed to capture frame."}
 
-        detections: list[FaceDetection] = self._detector.detect(frame)
-
-        if not detections:
-            logger.debug("process_frame() — no face detected.")
+        if state.face is None:
             return {"success": True, "face_detected": False}
 
-        face: FaceDetection = detections[0]
-        frame_width: int = frame.shape[1]
-
-        distance_cm: float = self._distance_estimator.estimate(face)
-        angle_deg: float = self._angle_estimator.estimate(face, frame_width)
-
-        result: dict[str, Any] = {
+        face = state.face
+        return {
             "success": True,
             "face_detected": True,
-            "distance_cm": float(distance_cm),
-            "angle_deg": float(angle_deg),
+            "distance_cm": float(state.distance_cm),
+            "angle_deg": float(state.angle_deg),
             "bbox": {
                 "x": int(face.bbox_x),
                 "y": int(face.bbox_y),
@@ -240,214 +383,82 @@ class FaceDistanceAPI:
             "detection_confidence": float(face.confidence),
         }
 
-        logger.debug(
-            "process_frame() — distance=%.2f cm, angle=%.2f°, "
-            "confidence=%.3f, bbox=(%d, %d, %d, %d).",
-            distance_cm,
-            angle_deg,
-            face.confidence,
-            face.bbox_x,
-            face.bbox_y,
-            face.bbox_width,
-            face.bbox_height,
-        )
+    def read_annotated_frame(self) -> Optional[bytes]:
+        """Return the latest annotated JPEG frame bytes for MJPEG streaming.
 
-        return result
+        This method does **not** read from the camera, run detection, or
+        perform any encoding work.  It simply returns a reference to the
+        bytes object most recently written by the pipeline thread.
+
+        Returns
+        -------
+        bytes or None
+            JPEG bytes of the latest annotated frame, or ``None`` if the
+            pipeline has not yet produced a frame.
+        """
+        with self._lock:
+            return self._jpeg_bytes
 
     def calibrate(self, known_distance_cm: float) -> float:
-        """Calibrate the focal length using a single captured frame.
+        """Calibrate the focal length using the latest pipeline detection.
 
-        Captures one frame, detects the first face, and uses
-        :meth:`~app.calibration.CameraCalibrator.calculate_focal_length`
-        to derive and store a calibrated focal length.
-
-        The calibrated focal length is stored in the ``CameraCalibrator``
-        instance owned by this class.  Integration of the new value into
-        the ``DistanceEstimator`` is intentionally deferred to a later
-        implementation step.
+        Reads the current ``_frame_state`` snapshot.  If a face is present,
+        uses its smoothed bounding box to compute a calibrated focal length.
 
         Parameters
         ----------
         known_distance_cm : float
-            The precise physical distance in centimetres between the camera
-            lens and the subject's face at the moment of calibration capture.
-            Must be strictly positive.
+            Physical distance in centimetres at calibration time.
 
         Returns
         -------
         float
-            The newly calibrated focal length in pixels, as returned by
-            :meth:`~app.calibration.CameraCalibrator.calculate_focal_length`.
+            The newly calibrated focal length in pixels.
 
         Raises
         ------
         RuntimeError
-            If the camera fails to capture a frame, or if no face is
-            detected in the captured frame.
+            If no face is currently detected in the pipeline.
         ValueError
-            If *known_distance_cm* is zero or negative (propagated from
-            :class:`~app.calibration.CameraCalibrator`).
+            If *known_distance_cm* is not positive.
         """
-        success, frame = self._camera.read()
+        with self._lock:
+            state = self._frame_state
 
-        if not success or frame is None:
-            logger.error(
-                "calibrate() — frame capture failed; "
-                "cannot perform calibration."
-            )
+        if not state.capture_ok:
             raise RuntimeError(
                 "Calibration failed: could not capture a frame from the camera."
             )
 
-        detections: list[FaceDetection] = self._detector.detect(frame)
-
-        if not detections:
-            logger.error(
-                "calibrate() — no face detected in calibration frame; "
-                "known_distance_cm=%.2f cm.",
-                known_distance_cm,
-            )
+        if state.face is None:
             raise RuntimeError(
                 "Calibration failed: no face was detected in the captured frame. "
                 "Ensure the subject is visible and well-lit, then retry."
             )
 
-        face: FaceDetection = detections[0]
-        focal_length: float = self._calibrator.calculate_focal_length(
-            face=face,
+        focal_length = self._calibrator.calculate_focal_length(
+            face=state.face,
             known_distance_cm=known_distance_cm,
         )
-
         logger.info(
-            "calibrate() — calibration completed, "
-            "known_distance=%.2f cm, focal_length=%.4f px.",
+            "calibrate() — completed, known_distance=%.2f cm, "
+            "focal_length=%.4f px.",
             known_distance_cm,
             focal_length,
         )
-
         return focal_length
 
-    def read_annotated_frame(self) -> Optional[bytes]:
-        """Capture one frame, annotate it with detection results, and return JPEG bytes.
-
-        Used exclusively by the ``GET /video`` MJPEG stream endpoint.
-        Reuses the same ``Camera`` and ``FaceDetector`` instances owned by
-        this class — no additional hardware resources are acquired.
-
-        The annotation pipeline:
-
-        1. Read one BGR frame from the camera.
-        2. Run face detection.
-        3. If a face is found:
-           a. Draw a bounding box rectangle using ``BOUNDING_BOX_COLOR``
-              and ``BOUNDING_BOX_THICKNESS`` from ``config.py``.
-           b. Estimate distance (cm) and angle (°).
-           c. Draw a label above the box:
-              ``Person <conf>%  <distance> cm  <angle>°``
-        4. JPEG-encode the annotated frame.
-        5. Return the encoded bytes, or ``None`` if capture failed.
-
-        Returns
-        -------
-        bytes or None
-            JPEG-encoded frame bytes, or ``None`` when the camera fails to
-            deliver a frame (client should stop consuming the stream).
-
-        Notes
-        -----
-        * This method intentionally does **not** update the moving-average
-          history inside ``DistanceEstimator`` — that state is owned by
-          ``process_frame()``.  Distance shown in the overlay is the raw
-          pinhole estimate so the two pipelines remain independent.
-        * JPEG quality is fixed at 85 — a good balance between file size
-          and visual fidelity for a live stream.
-        """
-        success, frame = self._camera.read()
-        if not success or frame is None:
-            logger.warning("read_annotated_frame() — frame capture failed.")
-            return None
-
-        detections: list[FaceDetection] = self._detector.detect(frame)
-
-        if detections:
-            face: FaceDetection = detections[0]
-            frame_width: int = frame.shape[1]
-
-            # Run estimators for overlay text only — do NOT update the
-            # moving-average buffer used by process_frame().
-            try:
-                distance_cm: float = self._distance_estimator.estimate(face)
-                angle_deg: float = self._angle_estimator.estimate(face, frame_width)
-            except Exception as exc:
-                logger.debug("read_annotated_frame() — estimator error: %s", exc)
-                distance_cm = 0.0
-                angle_deg = 0.0
-
-            # --- Draw bounding box ---
-            x, y, w, h = face.bbox_x, face.bbox_y, face.bbox_width, face.bbox_height
-            cv2.rectangle(
-                frame,
-                (x, y),
-                (x + w, y + h),
-                BOUNDING_BOX_COLOR,
-                BOUNDING_BOX_THICKNESS,
-            )
-
-            # --- Draw label above the box ---
-            conf_pct: int = round(face.confidence * 100)
-            label: str = (
-                f"Person {conf_pct}%  "
-                f"{distance_cm:.1f} cm  "
-                f"{angle_deg:+.1f}\u00b0"
-            )
-
-            # Choose a Y position above the box; clamp so text stays in frame.
-            label_y: int = max(y - 10, 20)
-            font = cv2.FONT_HERSHEY_SIMPLEX
-
-            # Dark shadow for readability on any background.
-            cv2.putText(
-                frame, label,
-                (x, label_y),
-                font, TEXT_SIZE,
-                (0, 0, 0),          # black shadow
-                BOUNDING_BOX_THICKNESS + 2,
-                cv2.LINE_AA,
-            )
-            # White foreground text.
-            cv2.putText(
-                frame, label,
-                (x, label_y),
-                font, TEXT_SIZE,
-                COLOR_TEXT,
-                BOUNDING_BOX_THICKNESS,
-                cv2.LINE_AA,
-            )
-
-        # JPEG encode — quality 85 balances size and fidelity.
-        encode_ok, buffer = cv2.imencode(
-            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
-        )
-        if not encode_ok:
-            logger.warning("read_annotated_frame() — JPEG encoding failed.")
-            return None
-
-        return buffer.tobytes()
-
     def shutdown(self) -> None:
-        """Release all backend resources.
+        """Stop the pipeline thread and release all hardware resources.
 
-        Calls ``Camera.stop()`` and ``FaceDetector.close()`` to release the
-        webcam device and MediaPipe model memory.  Safe to call multiple
-        times — subsequent calls after the first are no-ops.
-
-        Returns
-        -------
-        None
+        Safe to call multiple times; subsequent calls are no-ops.
         """
         if self._is_shutdown:
-            logger.debug("shutdown() called on an already-shut-down instance; skipping.")
+            logger.debug("shutdown() — already shut down; skipping.")
             return
+
+        self._stop_event.set()
+        self._pipeline_thread.join(timeout=3.0)
 
         self._camera.stop()
         self._detector.close()

@@ -1,25 +1,118 @@
+/* ── Card — glassmorphism dark panel ─────────────────────────────────────── */
+
 .card {
-  background: #1A2338;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 20px;
-  padding: 22px;
+  position: relative;
+  background: linear-gradient(
+    145deg,
+    rgba(22, 33, 55, 0.95) 0%,
+    rgba(15, 23, 40, 0.98) 100%
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+
+  /*
+   * overflow: visible so the accent stripe (::after, positioned left:0)
+   * is not clipped, and card content near the padding edges is not cut.
+   * The radial gradient overlay (::before) is absolutely positioned and
+   * stays inside the border-radius naturally.
+   */
+  overflow: visible;
+
+  /* Content padding — all content lives inside .card-body */
+  padding: clamp(16px, 1.6vw, 24px) clamp(18px, 1.8vw, 24px);
   color: white;
 
-  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  /* Height follows content — never fixed */
+  height: auto;
+  min-height: 0;
 
-  transition: transform .25s ease,
-              box-shadow .25s ease,
-              border-color .25s ease;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 32px rgba(0, 0, 0, 0.45);
+
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.2s ease;
+}
+
+/*
+ * Clip the radial gradient overlay to the card shape without using
+ * overflow:hidden on the card itself.
+ */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    rgba(99, 179, 237, 0.06) 0%,
+    transparent 65%
+  );
+  pointer-events: none;
+  /* clip-path mirrors the border-radius so the gradient stays inside */
+  clip-path: inset(0 round 16px);
+  z-index: 0;
 }
 
 .card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(59,130,246,.35);
-  box-shadow: 0 12px 30px rgba(0,0,0,.35);
+  border-color: rgba(99, 179, 237, 0.2);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(99, 179, 237, 0.06);
+  transform: translateY(-3px);
 }
 
-.card h2 {
-  font-size: 1.8rem;
-  margin-bottom: 18px;
+/* ── Accent left-border stripe ───────────────────────────────────────────── */
+
+.card--accent-blue::after,
+.card--accent-green::after,
+.card--accent-amber::after,
+.card--accent-rose::after {
+  content: "";
+  position: absolute;
+  left: -1px;           /* sits on the border edge */
+  top: 15%;
+  bottom: 15%;
+  width: 4px;
+  border-radius: 0 2px 2px 0;
+  opacity: 1.0;
+  z-index: 2;
+}
+
+.card--accent-blue::after  { background: #3b82f6; }
+.card--accent-green::after { background: #22c55e; }
+.card--accent-amber::after { background: #f59e0b; }
+.card--accent-rose::after  { background: #f43f5e; }
+
+/* ── Card title ──────────────────────────────────────────────────────────── */
+
+.card-title {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
   font-weight: 700;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0 0 clamp(10px, 1vw, 14px);
+  user-select: none;
+}
+
+/* ── Card body — all content renders above pseudo-element overlays ─────── */
+
+.card-body {
+  position: relative;
+  z-index: 1;
+  /* Ensure children with overflow (e.g. progress bars) clip to their own
+     bounds, not to the card edge */
+  min-width: 0;
 }

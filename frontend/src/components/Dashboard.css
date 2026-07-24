@@ -1,288 +1,468 @@
-/* ===== GOOGLE FONT ===== */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dashboard.css  ·  Face Distance Estimation
+   Premium dark AI dashboard — Linear / Vercel / Apple Vision Pro aesthetic
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:'Inter',sans-serif;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ── Reset (scoped) ──────────────────────────────────────────────────────── */
+.dashboard *,
+.dashboard *::before,
+.dashboard *::after {
+  box-sizing: border-box;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* ===== PAGE ===== */
+/* ── Design tokens ───────────────────────────────────────────────────────── */
+.dashboard {
+  /* Surfaces */
+  --surface-0: #060d1a;
+  --surface-1: #0c1625;
+  --surface-2: #111e33;
+  --surface-3: #162440;
 
-.dashboard{
-    min-height:100vh;
-    background:#0B1220;
-    color:#F8FAFC;
-    padding:30px;
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-muted:  rgba(255, 255, 255, 0.10);
+  --border-focus:  rgba(99, 179, 237, 0.40);
+
+  /* Status colours */
+  --green:  #22c55e;
+  --green-glow: rgba(34, 197, 94, 0.25);
+  --amber:  #f59e0b;
+  --red:    #ef4444;
+  --blue:   #3b82f6;
+
+  /* Text */
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #475569;
+  --text-dim:       #2d3f5a;
+
+  /* ── Layout ── */
+  min-height: 100vh;
+  width: 100%;
+  background: var(--surface-0);
+
+  /* Subtle noise texture via SVG data URI */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+
+  color: var(--text-primary);
+  padding: clamp(16px, 1.8vw, 32px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.2vw, 20px);
 }
 
-/* ===== HEADER ===== */
+/* ═══════════════════════════════════════════════════════════════════════════
+   HEADER — glassmorphism strip
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-.dashboard-header{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 
-    background:#172036;
+  background: linear-gradient(
+    135deg,
+    rgba(17, 30, 51, 0.92) 0%,
+    rgba(11, 20, 37, 0.96) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 
-    padding:25px 35px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  padding: clamp(14px, 1.4vw, 20px) clamp(20px, 2.4vw, 36px);
 
-    border-radius:20px;
-
-    margin-bottom:30px;
-
-    border:1px solid rgba(255,255,255,.08);
-
-    box-shadow:
-    0 12px 30px rgba(0,0,0,.35);
+  /* Prismatic top-edge highlight */
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 -1px 0 0 rgba(0, 0, 0, 0.3) inset,
+    0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-.header-left h1{
+/* ── Brand block ─────────────────────────────────────────────────────────── */
 
-    font-size:34px;
-
-    font-weight:700;
-
-    margin-bottom:8px;
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.header-left p{
-
-    color:#94A3B8;
-
-    font-size:15px;
+.header-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #7c3aed 100%);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
+  flex-shrink: 0;
 }
 
-.header-right{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:20px;
+.header-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.header-badge{
-
-    padding:10px 18px;
-
-    border-radius:30px;
-
-    font-weight:600;
+.header-brand h1 {
+  font-size: clamp(15px, 1.5vw, 20px);
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  margin: 0;
 }
 
-.success{
-
-    background:rgba(34,197,94,.15);
-
-    color:#22C55E;
+.header-brand p {
+  font-size: clamp(10px, 0.8vw, 12px);
+  color: #64748b;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  margin: 0;
 }
 
-.warning-badge{
+/* ── Right cluster ───────────────────────────────────────────────────────── */
 
-    background:rgba(250,204,21,.15);
-
-    color:#FACC15;
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.error-badge{
+/* ── Status badge ─────────────────────────────────────────────────────────── */
 
-    background:rgba(239,68,68,.15);
-
-    color:#EF4444;
+.header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: box-shadow 0.3s ease;
 }
 
-.connecting{
-
-    background:rgba(148,163,184,.15);
-
-    color:#94A3B8;
+.badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.header-info{
-
-    background:#1E293B;
-
-    padding:12px 18px;
-
-    border-radius:14px;
-
-    text-align:center;
-
-    min-width:90px;
+/* READY — animated green pulse */
+.header-badge.success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.2);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.12);
+}
+.header-badge.success .badge-dot {
+  background: #22c55e;
+  animation: badge-pulse 2s ease-in-out infinite;
 }
 
-.header-info span{
+/* NO FACE */
+.header-badge.warning-badge {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.2);
+}
+.header-badge.warning-badge .badge-dot { background: #f59e0b; }
 
-    display:block;
+/* OFFLINE */
+.header-badge.error-badge {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.header-badge.error-badge .badge-dot { background: #ef4444; }
 
-    color:#94A3B8;
-
-    font-size:12px;
-
-    margin-bottom:4px;
+/* CONNECTING */
+.header-badge.connecting {
+  background: rgba(148, 163, 184, 0.08);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.15);
+}
+.header-badge.connecting .badge-dot {
+  background: #94a3b8;
+  animation: badge-pulse 1.2s ease-in-out infinite;
 }
 
-.header-info strong{
-
-    font-size:18px;
-
-    color:white;
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
 }
 
-/* ===== GRID ===== */
+/* ── Stat chip (FPS / Latency) ───────────────────────────────────────────── */
 
-.dashboard-grid{
-    display:grid;
-    grid-template-columns:2.5fr 1fr;
-    gap:30px;
-    align-items:start;
+.header-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-width: 68px;
+  transition: border-color 0.2s ease;
 }
 
-/* ===== CAMERA ===== */
+.header-info:hover { border-color: var(--border-muted); }
 
-.camera-window{
-
-    height:1200px;
-
-    background:#172036;
-
-    border-radius:22px;
-
-    border:1px solid rgba(255,255,255,.08);
-
-    overflow:hidden;
-
-    position:relative;
-
-    display:flex;
-
-    justify-content:center;
-
-    align-items:center;
-
-    box-shadow:
-    0 15px 40px rgba(0,0,0,.35);
+.header-info span {
+  font-size: 9px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
-/* fake camera grid */
-
-.camera-window::before{
-
-    content:"";
-
-    position:absolute;
-
-    inset:0;
-
-    background-image:
-
-    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
-
-    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
-
-    background-size:40px 40px;
+.header-info strong {
+  font-size: clamp(14px, 1.2vw, 17px);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
-/* blue glow */
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAIN GRID
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-.camera-window::after{
+/*
+ * The grid sits inside a flex column (.dashboard).
+ * We do NOT use flex:1 / min-height:0 on the grid itself because that
+ * forces the grid row to fill the remaining viewport height and then
+ * camera-window (aspect-ratio: 16/9) fights that height constraint,
+ * causing overflow.
+ *
+ * Instead: let the grid be auto-height (driven by content).
+ * The camera column expands to its natural 16:9 width-derived height.
+ * The sidebar column scrolls independently when taller than the viewport.
+ */
 
-    content:"";
-
-    position:absolute;
-
-    width:450px;
-
-    height:450px;
-
-    border-radius:50%;
-
-    background:rgba(0,229,255,.06);
-
-    filter:blur(100px);
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 7fr 3fr;
+  gap: clamp(12px, 1.4vw, 20px);
+  align-items: start;   /* both columns start at the top; sidebar can be taller */
+  width: 100%;
 }
 
-/* ===== CAMERA STREAM ===== */
+/* ═══════════════════════════════════════════════════════════════════════════
+   CAMERA CARD — the hero element
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.camera-section {
+  /* Let the section be exactly as tall as the camera-window needs to be */
+  width: 100%;
+  min-width: 0;   /* prevent grid blowout */
+}
+
+.camera-window {
+  /*
+   * width: 100% of the grid column.
+   * aspect-ratio: 16/9 derives height from that width automatically.
+   * This means the camera is ALWAYS correctly proportioned and NEVER
+   * taller than its natural 16:9 height — no overflow possible.
+   */
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+
+  background: var(--surface-1);
+
+  box-shadow:
+    0 0 0 1px var(--border-subtle),
+    0 2px 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 -2px 0 1px rgba(0, 0, 0, 0.3) inset,
+    0 20px 60px rgba(0, 0, 0, 0.7),
+    0 0 80px rgba(59, 130, 246, 0.04);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Fine grid overlay */
+.camera-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Corner accent lines — Tesla-style scan corners */
+.camera-window::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow:
+    /* top-left */
+    -1px -1px 0 0 rgba(59, 130, 246, 0.35) inset,
+    /* top-right */
+     1px -1px 0 0 rgba(59, 130, 246, 0.35) inset,
+    /* bottom-left */
+    -1px  1px 0 0 rgba(59, 130, 246, 0.35) inset,
+    /* bottom-right */
+     1px  1px 0 0 rgba(59, 130, 246, 0.35) inset;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ── MJPEG stream ─────────────────────────────────────────────────────────── */
 
 .camera-stream {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    border-radius: 22px;
-    z-index: 1;
-    opacity: 0;
-    transition: opacity 0.4s ease;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 18px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.camera-stream--visible {
-    opacity: 1;
+.camera-stream--visible { opacity: 1; }
+
+/* ── Offline overlay ─────────────────────────────────────────────────────── */
+
+.camera-overlay {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
 }
 
-/* overlay */
-
-.camera-overlay{
-
-    position:relative;
-
-    z-index:2;
-
-    display:flex;
-
-    flex-direction:column;
-
-    align-items:center;
-
-    gap:20px;
-
-    text-align:center;
+.camera-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
 }
 
-.camera-icon{
-
-    font-size:70px;
+.camera-overlay h2 {
+  font-size: clamp(12px, 1.1vw, 16px);
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  margin: 0;
 }
 
-.camera-overlay h2{
-
-    font-size:30px;
-
-    letter-spacing:3px;
+.camera-overlay p {
+  font-size: clamp(11px, 0.8vw, 13px);
+  color: var(--text-muted);
+  max-width: 240px;
+  line-height: 1.6;
+  margin: 0;
 }
 
-.camera-overlay p{
+/* ═══════════════════════════════════════════════════════════════════════════
+   RIGHT SIDEBAR
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-    color:#94A3B8;
+/*
+ * The sidebar does NOT get a fixed max-height derived from viewport arithmetic.
+ * That calculation was always slightly wrong and caused clipping.
+ *
+ * Instead: sidebar scrolls when its natural content height exceeds the
+ * viewport, using position:sticky on the aside element so it stays
+ * anchored to the top while the page scrolls, and overflow-y:auto so
+ * the cards inside can scroll if needed.
+ *
+ * Cards themselves have height:auto — they never clip their content.
+ */
+
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1vw, 14px);
+  width: 100%;
+  min-width: 0;   /* prevent grid blowout */
+
+  /* Stick to top of viewport while user scrolls the page */
+  position: sticky;
+  top: clamp(14px, 1.8vw, 28px);
+
+  /* If the stacked cards are taller than the viewport, scroll within */
+  max-height: calc(100vh - clamp(28px, 3.6vw, 56px));
+  overflow-y: auto;
+  overflow-x: visible;
+
+  /* Thin custom scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.07) transparent;
 }
 
-/* ===== RIGHT PANEL ===== */
-
-.right-panel{
-
-    display:flex;
-
-    flex-direction:column;
-
-    gap:24px;
+.right-panel::-webkit-scrollbar       { width: 3px; }
+.right-panel::-webkit-scrollbar-track { background: transparent; }
+.right-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
 }
 
-/* ===== RESPONSIVE ===== */
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-@media(max-width:1200px){
+/* Tablet / small laptop — stack camera above sidebar */
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 
-.dashboard-grid{
-
-grid-template-columns:1fr;
-
+  /* Sidebar un-sticks and flows naturally below the camera */
+  .right-panel {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
 }
 
-.camera-window{
-
-height: 1200px;
-
+/* Wide desktop — a little more breathing room */
+@media (min-width: 1600px) {
+  .dashboard {
+    padding: clamp(20px, 1.6vw, 36px);
+  }
 }
 
+/* Ultra-wide — cap total width so content doesn't stretch too far */
+@media (min-width: 2200px) {
+  .dashboard {
+    max-width: 2200px;
+    margin: 0 auto;
+  }
 }

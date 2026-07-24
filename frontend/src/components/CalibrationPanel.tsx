@@ -1,98 +1,92 @@
-/**
- * CalibrationPanel.tsx
- *
- * Allows the user to trigger a single-frame focal-length calibration.
- *
- * Workflow:
- *  1. User enters the known distance (cm) to the camera.
- *  2. User clicks "Calibrate".
- *  3. POST /calibrate is called via the api service.
- *  4. On success: the returned focal_length is displayed.
- *  5. On failure: a meaningful error message is shown.
- *
- * This component manages only its own local form state — no global
- * state is touched.
- */
-
 import { useState } from "react";
 import { calibrate } from "../services/api";
 import Card from "./Common/Card";
 import "./CalibrationPanel.css";
 
-/** Minimum sensible distance for calibration in centimetres. */
 const MIN_DISTANCE_CM = 10;
-
-/** Maximum sensible distance for calibration in centimetres. */
 const MAX_DISTANCE_CM = 500;
+
+function IcoTarget() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <circle cx="12" cy="12" r="6"/>
+      <circle cx="12" cy="12" r="2"/>
+    </svg>
+  );
+}
+
+function IcoLoader() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+      className="spin">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+    </svg>
+  );
+}
 
 function CalibrationPanel() {
   const [distanceInput, setDistanceInput] = useState<string>("");
-  const [focalLength, setFocalLength] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [focalLength, setFocalLength]     = useState<number | null>(null);
+  const [isLoading, setIsLoading]         = useState(false);
+  const [error, setError]                 = useState<string | null>(null);
 
-  /** Parse and validate the user's distance input. */
   function parseDistance(): number | null {
     const value = parseFloat(distanceInput);
-    if (isNaN(value) || value < MIN_DISTANCE_CM || value > MAX_DISTANCE_CM) {
-      return null;
-    }
+    if (isNaN(value) || value < MIN_DISTANCE_CM || value > MAX_DISTANCE_CM) return null;
     return value;
   }
 
   async function handleCalibrate() {
     setError(null);
     setFocalLength(null);
-
     const distance = parseDistance();
     if (distance === null) {
-      setError(
-        `Please enter a valid distance between ${MIN_DISTANCE_CM} and ${MAX_DISTANCE_CM} cm.`
-      );
+      setError(`Enter a distance between ${MIN_DISTANCE_CM}–${MAX_DISTANCE_CM} cm.`);
       return;
     }
-
     setIsLoading(true);
     try {
       const result = await calibrate(distance);
       setFocalLength(result.focal_length);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Calibration failed.";
-      setError(message);
+      setError(err instanceof Error ? err.message : "Calibration failed.");
     } finally {
       setIsLoading(false);
     }
   }
 
-  const inputValid =
-    distanceInput !== "" && parseDistance() !== null;
+  const inputValid = distanceInput !== "" && parseDistance() !== null;
 
   return (
-    <Card title="🔧 Calibration">
+    <Card title="Calibration" accent="none">
       <div className="calibration-container">
         <p className="calibration-description">
-          Stand at a known distance from the camera and enter it below,
-          then click Calibrate to update the focal length.
+          Stand at a known distance, enter it below, then calibrate.
         </p>
 
         <div className="calibration-input-row">
-          <input
-            type="number"
-            className="calibration-input"
-            placeholder="Distance (cm)"
-            min={MIN_DISTANCE_CM}
-            max={MAX_DISTANCE_CM}
-            step="1"
-            value={distanceInput}
-            onChange={(e) => {
-              setDistanceInput(e.target.value);
-              setError(null);
-              setFocalLength(null);
-            }}
-            disabled={isLoading}
-            aria-label="Known distance in centimetres"
-          />
+          <div className="calibration-input-wrap">
+            <input
+              type="number"
+              className="calibration-input"
+              placeholder="Distance (cm)"
+              min={MIN_DISTANCE_CM}
+              max={MAX_DISTANCE_CM}
+              step="1"
+              value={distanceInput}
+              onChange={(e) => {
+                setDistanceInput(e.target.value);
+                setError(null);
+                setFocalLength(null);
+              }}
+              disabled={isLoading}
+              aria-label="Known distance in centimetres"
+            />
+            <span className="calibration-input-unit">cm</span>
+          </div>
 
           <button
             className={`calibration-button ${isLoading ? "loading" : ""}`}
@@ -100,21 +94,24 @@ function CalibrationPanel() {
             disabled={isLoading || !inputValid}
             aria-busy={isLoading}
           >
-            {isLoading ? "Calibrating…" : "Calibrate"}
+            {isLoading ? (
+              <><IcoLoader /> Calibrating</>
+            ) : (
+              <><IcoTarget /> Calibrate</>
+            )}
           </button>
         </div>
 
-        {/* Success result */}
         {focalLength !== null && (
           <div className="calibration-result success">
-            ✅ Focal length: <strong>{focalLength.toFixed(2)} px</strong>
+            <span className="cal-result-label">Focal length</span>
+            <span className="cal-result-value">{focalLength.toFixed(1)} px</span>
           </div>
         )}
 
-        {/* Error message */}
         {error !== null && (
           <div className="calibration-result error">
-            ❌ {error}
+            {error}
           </div>
         )}
       </div>

@@ -34,7 +34,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Iterator
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -363,39 +363,20 @@ _MJPEG_CONTENT_TYPE: str = (
 
 
 async def _mjpeg_generator(api: FaceDistanceAPI) -> AsyncGenerator[bytes, None]:
-    """Async generator that yields MJPEG multipart frames indefinitely.
+    """Yield MJPEG multipart envelopes from the shared pipeline's JPEG buffer.
 
-    Each iteration:
-    1. Calls ``api.read_annotated_frame()`` to get a JPEG-encoded, annotated
-       frame from the shared camera/detector.
-    2. Wraps the bytes in the MJPEG multipart envelope.
-    3. Yields the envelope bytes to the StreamingResponse.
-    4. Sleeps for the configured inter-frame interval so the loop targets
-       ~30 fps without busy-spinning.
+    Because ``read_annotated_frame()`` is now a pure reader (lock + copy of
+    a pre-encoded bytes object), it is fast enough to call directly on the
+    async event loop without a thread executor.
 
-    The generator exits cleanly when the client disconnects — FastAPI /
-    Starlette propagates a ``GeneratorExit`` or ``asyncio.CancelledError``
-    which terminates the async for-loop in the route.
-
-    Parameters
-    ----------
-    api : FaceDistanceAPI
-        The shared application API instance that owns the camera and detector.
-
-    Yields
-    ------
-    bytes
-        One MJPEG multipart envelope per camera frame.
+    The generator sleeps for ``_STREAM_FRAME_INTERVAL`` between yields so
+    the loop targets ~30 fps and does not busy-spin when the pipeline thread
+    is slower than the stream consumer.
     """
     while True:
-        # Offload the synchronous OpenCV work to a thread so the event loop
-        # is not blocked during frame capture and encoding.
-        frame_bytes: bytes | None = await asyncio.get_event_loop().run_in_executor(
-            None, api.read_annotated_frame
-        )
+        frame_bytes: bytes | None = api.read_annotated_frame()
 
         if frame_bytes is not None:
-            # Build the MJPEG multipart envelope.
             envelope = (
                 _MJPEG_BOUNDARY + b"\r\n"
                 b"Content-Type: image/jpeg\r\n"
@@ -405,8 +386,8 @@ async def _mjpeg_generator(api: FaceDistanceAPI) -> AsyncGenerator[bytes, None]:
                 b"\r\n"
             )
             yield envelope
+        # else: pipeline thread hasn't produced a frame yet — sleep and retry
 
-        # Yield control back to the event loop between frames.
         await asyncio.sleep(_STREAM_FRAME_INTERVAL)
 
 

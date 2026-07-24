@@ -1,49 +1,81 @@
+/* Confidence.css */
+
 .confidence-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.confidence-score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;        /* badge wraps below value on very narrow sidebars */
+  gap: 6px;
+  min-width: 0;
 }
 
 .confidence-value {
-    font-size: 48px;
-    color: white;
-    margin: 0;
+  font-size: clamp(28px, 2.8vw, 36px);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
 }
 
-.confidence-status {
-    font-size: 18px;
-    font-weight: bold;
-    margin: 0;
+.confidence-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
-.excellent {
-    color: #22c55e;
-}
+/* Colour states */
+.confidence-value.excellent,
+.confidence-badge.excellent { color: #4ade80; }
+.confidence-badge.excellent { background: rgba(74, 222, 128, 0.1); }
 
-.good {
-    color: #3b82f6;
-}
+.confidence-value.good,
+.confidence-badge.good { color: #60a5fa; }
+.confidence-badge.good { background: rgba(96, 165, 250, 0.1); }
 
-.fair {
-    color: #facc15;
-}
+.confidence-value.fair,
+.confidence-badge.fair { color: #fbbf24; }
+.confidence-badge.fair { background: rgba(251, 191, 36, 0.1); }
 
-.poor {
-    color: #ef4444;
-}
+.confidence-value.poor,
+.confidence-badge.poor { color: #f87171; }
+.confidence-badge.poor { background: rgba(248, 113, 113, 0.1); }
 
-.progress-bar {
-    width: 100%;
-    height: 12px;
-    background: #2b2b2b;
-    border-radius: 10px;
-    overflow: hidden;
+/* Progress bar */
+.progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
 }
 
 .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #22c55e, #4ade80);
-    border-radius: 10px;
-    transition: width 0.5s ease;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-fill.excellent { background: linear-gradient(90deg, #16a34a, #4ade80); }
+.progress-fill.good      { background: linear-gradient(90deg, #1d4ed8, #60a5fa); }
+.progress-fill.fair      { background: linear-gradient(90deg, #b45309, #fbbf24); }
+.progress-fill.poor      { background: linear-gradient(90deg, #b91c1c, #f87171); }
+
+/* Tick marks */
+.progress-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #2d3f5a;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  margin-top: -2px;
 }
