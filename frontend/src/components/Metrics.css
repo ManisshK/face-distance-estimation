@@ -9,7 +9,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   transition: background 0.15s ease;
 }
@@ -22,10 +22,8 @@
 .metric-row--primary {
   background: rgba(59, 130, 246, 0.08);
   border-left: 2px solid rgba(59, 130, 246, 0.6);
-  padding-left: 10px;
-  margin-left: -12px;
-  padding-right: 12px;
-  margin-right: -12px;
+  padding-left: 8px;
+  padding-right: 0;
 }
 
 .metric-row--primary .metric-value {
@@ -46,6 +44,7 @@
 .metric-icon {
   display: flex;
   align-items: center;
+  justify-content: center;
   color: #334155;
   flex-shrink: 0;
 }

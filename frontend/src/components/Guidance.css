@@ -3,7 +3,7 @@
 .guidance-container {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;   /* allow flex children to shrink */
 }
 
@@ -42,7 +42,7 @@
 .guidance-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
 }

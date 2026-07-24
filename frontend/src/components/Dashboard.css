@@ -257,7 +257,7 @@
 .dashboard-grid {
   display: grid;
   grid-template-columns: 7fr 3fr;
-  gap: clamp(12px, 1.4vw, 20px);
+  gap: clamp(10px, 1.1vw, 16px);
   align-items: start;   /* both columns start at the top; sidebar can be taller */
   width: 100%;
 }
@@ -339,7 +339,7 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   border-radius: 18px;
   z-index: 1;
   opacity: 0;
@@ -409,16 +409,16 @@
 .right-panel {
   display: flex;
   flex-direction: column;
-  gap: clamp(10px, 1vw, 14px);
+  gap: clamp(8px, 0.8vw, 12px);
   width: 100%;
   min-width: 0;   /* prevent grid blowout */
 
   /* Stick to top of viewport while user scrolls the page */
   position: sticky;
-  top: clamp(14px, 1.8vw, 28px);
+  top: clamp(12px, 1.4vw, 20px);
 
   /* If the stacked cards are taller than the viewport, scroll within */
-  max-height: calc(100vh - clamp(28px, 3.6vw, 56px));
+  max-height: calc(100vh - clamp(24px, 2.8vw, 40px));
   overflow-y: auto;
   overflow-x: visible;
 
